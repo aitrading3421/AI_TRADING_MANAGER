@@ -1,27 +1,22 @@
 import streamlit as st
 import psycopg2
 import pandas as pd
+import numpy as np
+import yfinance as yf
 from ta.momentum import RSIIndicator
 from ta.trend import MACD
 from sklearn.linear_model import LinearRegression
-import numpy as np
 
 # -----------------------------
-# Page Settings
+# PAGE SETTINGS
 # -----------------------------
 st.set_page_config(page_title="AI Trading Manager", layout="wide")
 
 st.title("🤖 AI Trading Manager")
-st.write("Professional Stock Analysis Dashboard")
+st.write("Professional AI Paper Trading Dashboard")
 
 # -----------------------------
-# Stock Selector
-# -----------------------------
-st.write("📈 Stock: AAPL")
-stock_symbol = "AAPL"
-
-# -----------------------------
-# Connect to PostgreSQL
+# DATABASE CONNECTION
 # -----------------------------
 conn = psycopg2.connect(
     host="localhost",
@@ -34,55 +29,70 @@ conn = psycopg2.connect(
 cur = conn.cursor()
 
 # -----------------------------
-# Get Stock Data
+# ACCOUNT BALANCE
 # -----------------------------
+cur.execute("SELECT balance FROM account LIMIT 1;")
+row = cur.fetchone()
+
+if row:
+    balance = float(row[0])
+else:
+    balance = 0.0
+
+st.subheader("💰 Paper Trading Account")
+st.metric("Account Balance", f"${balance:,.2f}")
+
+# -----------------------------
+# STOCK
+# -----------------------------
+stock_symbol = "AAPL"
+
 cur.execute("""
 SELECT trade_date, close_price
 FROM stock_prices
-WHERE symbol = %s
+WHERE symbol=%s
 ORDER BY trade_date;
 """, (stock_symbol,))
 
 rows = cur.fetchall()
 
-if len(rows) == 0:
-    st.error(f"No data found for {stock_symbol}.")
-    cur.close()
-    conn.close()
+if not rows:
+    st.error("No stock data found.")
     st.stop()
 
-prices = [float(row[1]) for row in rows]
-dates = [row[0] for row in rows]
+dates = [r[0] for r in rows]
+prices = [float(r[1]) for r in rows]
 
 price_series = pd.Series(prices)
 
-# -----------------------------
-# Technical Indicators
-# -----------------------------
-moving_average = sum(prices[-3:]) / 3
 latest = prices[-1]
-
+moving_average = sum(prices[-3:]) / 3
+# -----------------------------
+# TECHNICAL INDICATORS
+# -----------------------------
 rsi = RSIIndicator(close=price_series, window=14)
-rsi_value = rsi.rsi().iloc[-1]
+rsi_value = float(rsi.rsi().iloc[-1])
 
 macd = MACD(close=price_series)
-macd_value = macd.macd().iloc[-1]
-signal_value = macd.macd_signal().iloc[-1]
+macd_value = float(macd.macd().iloc[-1])
+signal_value = float(macd.macd_signal().iloc[-1])
 
 # -----------------------------
-# Machine Learning Prediction
+# MACHINE LEARNING PREDICTION
 # -----------------------------
-X = np.array(range(len(prices))).reshape(-1, 1)
+X = np.arange(len(prices)).reshape(-1, 1)
 y = np.array(prices)
 
 model = LinearRegression()
 model.fit(X, y)
 
-prediction = model.predict([[len(prices)]])[0]
+prediction = float(model.predict([[len(prices)]])[0])
 
 # -----------------------------
-# Dashboard Metrics
+# DASHBOARD METRICS
 # -----------------------------
+st.subheader("📊 Market Analysis")
+
 col1, col2, col3 = st.columns(3)
 
 with col1:
@@ -103,7 +113,7 @@ with col5:
     st.metric("MACD", f"{macd_value:.2f}")
 
 # -----------------------------
-# AI Decision
+# AI DECISION
 # -----------------------------
 if latest > moving_average and rsi_value < 70 and macd_value > signal_value:
     decision = "🟢 STRONG BUY"
@@ -112,58 +122,101 @@ elif latest < moving_average and rsi_value > 30 and macd_value < signal_value:
 else:
     decision = "🟡 HOLD"
 
-st.subheader("🤖 AI Decision")
+st.subheader("🤖 AI Trading Decision")
 st.success(decision)
+st.subheader("📌 Execute Paper Trade")
 
+shares = st.number_input("Shares", min_value=1, value=10)
+
+if st.button("Execute AI Trade"):
+
+    if "BUY" in decision:
+
+        total = latest * shares
+
+        cur.execute("""
+        INSERT INTO portfolio(symbol, shares, buy_price, buy_date)
+        VALUES(%s,%s,%s,NOW())
+        """,(stock_symbol,shares,latest))
+
+        cur.execute("""
+        INSERT INTO trade_history(symbol,action,shares,price,total)
+        VALUES(%s,%s,%s,%s,%s)
+        """,(stock_symbol,"BUY",shares,latest,total))
+
+        conn.commit()
+
+        st.success("BUY Trade Saved!")
+
+    elif "SELL" in decision:
+
+        total = latest * shares
+
+        cur.execute("""
+        INSERT INTO trade_history(symbol,action,shares,price,total)
+        VALUES(%s,%s,%s,%s,%s)
+        """,(stock_symbol,"SELL",shares,latest,total))
+
+        conn.commit()
+
+        st.success("SELL Trade Saved!")
+
+    else:
+
+        st.warning("AI says HOLD")
 # -----------------------------
-# Price Chart
+# PRICE CHART
 # -----------------------------
+st.subheader("📈 Stock Price Chart")
+
 df = pd.DataFrame({
     "Date": dates,
     "Close Price": prices
 })
 
-st.subheader("📈 Stock Price Chart")
 st.line_chart(df.set_index("Date"))
 
 # -----------------------------
-# Portfolio
+# PORTFOLIO
 # -----------------------------
 st.subheader("💼 Portfolio")
 
 cur.execute("""
 SELECT symbol, shares, buy_price, buy_date
-FROM portfolio;
+FROM portfolio
+ORDER BY buy_date;
 """)
 
 portfolio = cur.fetchall()
 
 total_shares = 0
-total_profit = 0
 total_value = 0
+total_profit = 0
 
 if len(portfolio) == 0:
     st.info("No shares in portfolio.")
-  else:
-    for stock in portfolio:
-        symbol, shares, buy_price, buy_date = stock
+else:
+
+    for symbol, shares, buy_price, buy_date in portfolio:
 
         shares = int(shares)
         buy_price = float(buy_price)
 
-        current_value = latest * shares
-        buy_value = buy_price * shares
-        profit = current_value - buy_value
+        current_price = latest
+        current_value = current_price * shares
+        invested = buy_price * shares
+        profit = current_value - invested
 
         total_shares += shares
-        total_profit += profit
         total_value += current_value
+        total_profit += profit
 
-        st.write(f"### 📈 {symbol}")
+        st.markdown(f"### 📈 {symbol}")
         st.write(f"**Shares:** {shares}")
         st.write(f"**Buy Price:** ${buy_price:.2f}")
-        st.write(f"**Current Price:** ${latest:.2f}")
+        st.write(f"**Current Price:** ${current_price:.2f}")
         st.write(f"**Current Value:** ${current_value:.2f}")
+        st.write(f"**Buy Date:** {buy_date}")
 
         if profit >= 0:
             st.success(f"Profit: +${profit:.2f}")
@@ -172,15 +225,41 @@ if len(portfolio) == 0:
 
         st.write("---")
 
-    st.metric("💼 Total Shares", total_shares)
-    st.metric("💰 Portfolio Value", f"${total_value:.2f}")
+    st.subheader("📊 Portfolio Summary")
 
-    if total_profit >= 0:
-        st.success(f"📈 Total Profit: +${total_profit:.2f}")
-    else:
-        st.error(f"📉 Total Loss: ${total_profit:.2f}")
+    c1, c2, c3 = st.columns(3)
+
+    with c1:
+        st.metric("Total Shares", total_shares)
+
+    with c2:
+        st.metric("Portfolio Value", f"${total_value:.2f}")
+
+    with c3:
+        st.metric("Profit / Loss", f"${total_profit:.2f}")
 # -----------------------------
-# Close Connection
+# FINAL SUMMARY
+# -----------------------------
+st.divider()
+
+st.subheader("📋 AI Trading Summary")
+
+st.write(f"**Stock:** {stock_symbol}")
+st.write(f"**Latest Price:** ${latest:.2f}")
+st.write(f"**3-Day Moving Average:** ${moving_average:.2f}")
+st.write(f"**Predicted Tomorrow Price:** ${prediction:.2f}")
+st.write(f"**AI Decision:** {decision}")
+
+# -----------------------------
+# FOOTER
+# -----------------------------
+st.divider()
+
+st.caption("🤖 AI Trading Manager")
+st.caption("Built with Python • PostgreSQL • Streamlit • Machine Learning")
+
+# -----------------------------
+# CLOSE DATABASE
 # -----------------------------
 cur.close()
-conn.close() 
+conn.close()        
