@@ -370,10 +370,13 @@ if __name__ == "__main__":
         symbol="AAPL",
 
         market_decision="BUY",
+        market_confidence=65,
 
         news_sentiment="POSITIVE",
+        news_confidence=90,
 
-        risk_level="LOW"
+        risk_level="LOW",
+        risk_confidence=95,
 
     )
 

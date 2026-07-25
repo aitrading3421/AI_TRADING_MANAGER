@@ -175,13 +175,22 @@ def create_stock_prices():
 
         trade_date DATE,
 
-        close_price NUMERIC(12,4)
+        open_price NUMERIC(12,4),
+
+        high_price NUMERIC(12,4),
+
+        low_price NUMERIC(12,4),
+
+        close_price NUMERIC(12,4),
+
+        volume BIGINT,
+
+        UNIQUE(symbol, trade_date)
 
     );
     """)
 
     print("✅ stock_prices table ready")
-
 
 # ==========================================
 # AI DECISIONS
@@ -296,25 +305,28 @@ def create_manager_decisions():
     cur.execute("""
     CREATE TABLE IF NOT EXISTS manager_decisions (
 
-        id SERIAL PRIMARY KEY,
+    id SERIAL PRIMARY KEY,
 
-        decision_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    decision_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
-        symbol VARCHAR(20),
+    symbol VARCHAR(20),
 
-        market_decision VARCHAR(20),
+    market_decision VARCHAR(20),
+    market_confidence DOUBLE PRECISION,
 
-        news_sentiment VARCHAR(20),
+    news_sentiment VARCHAR(20),
+    news_confidence DOUBLE PRECISION,
 
-        risk_level VARCHAR(20),
+    risk_level VARCHAR(20),
+    risk_confidence DOUBLE PRECISION,
 
-        final_decision VARCHAR(20),
+    final_decision VARCHAR(20),
 
-        confidence DECIMAL(5,2),
+    confidence DOUBLE PRECISION,
 
-        reason TEXT
+    reason TEXT
 
-    );
+      );
     """)
 
     print("✅ manager_decisions table ready")

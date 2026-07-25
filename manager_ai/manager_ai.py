@@ -1,3 +1,8 @@
+from config import EMAIL
+from email_report import EmailAI
+from error_monitor_ai.error_monitor_ai import ErrorMonitorAI
+from feedback_ai.feedback_ai import FeedbackAI
+from learning_ai.learning_ai import LearningAI
 from memory_ai.memory_ai import MemoryAI
 from fusion_ai.fusion_ai import FusionAI
 from market_ai.market_ai import MarketAI
@@ -9,18 +14,13 @@ from report_ai.report_ai import ReportAI
 
 import psycopg2
 
-
 class ManagerAI:
 
-    def __init__(self):
+    def  __init__(self):
 
         print("=" * 60)
         print("🤖 AI TRADING MANAGER V2")
         print("=" * 60)
-
-        # -----------------------------
-        # DATABASE
-        # -----------------------------
 
         self.conn = psycopg2.connect(
             host="localhost",
@@ -32,16 +32,10 @@ class ManagerAI:
 
         self.cur = self.conn.cursor()
 
-        # -----------------------------
-        # LOAD ALL AI MODULES
-        # -----------------------------
-
         print("Loading AI Modules...\n")
 
         self.market_ai = MarketAI()
-
         self.news_ai = NewsAI()
-
         self.rule_engine = RuleEngine()
 
         self.risk_ai = RiskAI(
@@ -50,12 +44,13 @@ class ManagerAI:
         )
 
         self.trade_ai = TradeAI()
-
         self.report_ai = ReportAI()
-
         self.fusion_ai = FusionAI()
-
         self.memory_ai = MemoryAI()
+        self.feedback_ai = FeedbackAI()
+        self.learning_ai = LearningAI()
+        self.error_monitor_ai = ErrorMonitorAI()
+        self.email_ai = EmailAI()
 
         print("✅ Market AI Loaded")
         print("✅ News AI Loaded")
@@ -65,12 +60,12 @@ class ManagerAI:
         print("✅ Report AI Loaded")
         print("✅ Fusion AI Loaded")
         print("✅ Memory AI Loaded")
+        print("✅ Feedback AI Loaded")
+        print("✅ learning AI Loaded")
+        print("✅ Error Monitor AI Loaded")
+        print("✅ Email AI Loaded")
 
         print("\n✅ Manager AI Ready\n")
-
-      # ==========================================
-      # RUN MANAGER AI
-      # ==========================================
 
     def run(self):
 
@@ -100,30 +95,23 @@ class ManagerAI:
 
         print("✅ News AI Finished")
 
+
         # ---------------------------------
         # GET LATEST NEWS SENTIMENT
         # ---------------------------------
 
         self.cur.execute("""
-
             SELECT sentiment
-
             FROM news_cache
-
             ORDER BY id DESC
-
             LIMIT 1
-
         """)
 
         row = self.cur.fetchone()
 
         if row:
-
             news_sentiment = row[0]
-
         else:
-
             news_sentiment = "UNKNOWN"
 
         print()
@@ -133,51 +121,35 @@ class ManagerAI:
         # RULE ENGINE
         # ---------------------------------
 
-        decision =self.rule_engine.evaluate(market)
+        self.rule_engine.evaluate(market)
 
         print()
-        print("Market Decision :",
-        market["decision"])
-        print("Market Confidence :",
-        market["confidence"], "%")
+        print("Market Decision :", market["decision"])
+        print("Market Confidence :", market["confidence"], "%")
 
-       
         # ---------------------------------
         # FUSION AI
         # ---------------------------------
 
         print("\n🧠 Running Fusion AI...\n")
 
-        # For now we'll assume LOW risk.
-        # Later we'll replace this with the actual Risk AI output.
-        risk_level = "LOW"
-
         fusion_result = self.fusion_ai.save_decision(
-
-             symbol=market["symbol"],
-
-             market_decision=market["decision"],
-
-             market_confidence=market["confidence"],
-
-             news_sentiment=news_sentiment,
-
-             news_confidence=90,
-
-             risk_level=risk_level,
-
-             risk_confidence=95
-
+            symbol=market["symbol"],
+            market_decision=market["decision"],
+            market_confidence=market["confidence"],
+            news_sentiment=news_sentiment,
+            news_confidence=90,
+            risk_level="LOW",
+            risk_confidence=95
         )
+
         manager_decision = fusion_result["decision"]
 
         print()
-
         print("👑 Final Manager Decision :", manager_decision)
-
         print("🔥 Confidence :", fusion_result["confidence"], "%")
-
         print("📝 Reason :", fusion_result["reason"])
+
 
         # ---------------------------------
         # RISK AI
@@ -190,6 +162,8 @@ class ManagerAI:
             price=market["latest_price"]
         )
 
+        trade_result = None
+
         if risk["approved"]:
 
             print("✅ Risk AI Approved")
@@ -198,7 +172,7 @@ class ManagerAI:
 
                 print("\n💹 Executing Trade...\n")
 
-                self.trade_ai.execute_trade(
+                trade_result = self.trade_ai.execute_trade(
                     market["symbol"],
                     manager_decision,
                     1,
@@ -221,6 +195,7 @@ class ManagerAI:
 
             manager_status = "BLOCKED_BY_RISK"
 
+
         # ---------------------------------
         # SAVE MANAGER EVENT
         # ---------------------------------
@@ -236,7 +211,6 @@ class ManagerAI:
         """, (
 
             f"Decision : {manager_decision}",
-
             manager_status
 
         ))
@@ -244,6 +218,34 @@ class ManagerAI:
         self.conn.commit()
 
         print("✅ Manager Event Saved")
+
+
+        # ---------------------------------
+        # MEMORY AI
+        # ---------------------------------
+
+        print("\n🧠 Saving Memory...\n")
+
+        self.memory_ai.save_memory(
+
+            symbol=market["symbol"],
+
+            market_decision=market["decision"],
+            market_confidence=market["confidence"],
+
+            news_sentiment=news_sentiment,
+            news_confidence=90,
+
+            risk_level="LOW",
+            risk_confidence=95,
+
+            final_decision=manager_decision,
+            final_confidence=fusion_result["confidence"]
+
+            )
+
+        print("✅ Memory Saved")
+ 
 
         # ---------------------------------
         # REPORT AI
@@ -253,7 +255,75 @@ class ManagerAI:
 
         self.report_ai.print_report()
 
-        print("\n✅ Report Generated")  
+        print("\n✅ Report Generated")
+
+
+        # ---------------------------------
+        # EMAIL AI
+        # ---------------------------------
+
+        print("\n📧 Sending Email Report...\n")
+
+        self.email_ai.send_email(
+            subject="AI Trading Manager Report",
+            body=f"""
+        Manager Decision : 
+            {manager_decision}
+
+        Confidence : 
+            {fusion_result['confidence']}%
+
+        Reason :
+            {fusion_result['reason']}
+
+        Status :
+            {manager_status}
+        """,
+            receiver=EMAIL
+        )
+
+        print("✅ Email Report Sent")
+
+
+        # ---------------------------------
+        # FEEDBACK AI
+        # ---------------------------------
+
+        if trade_result is not None:
+
+            print("\n🏆 Running Feedback AI...\n")
+
+            profit = trade_result["profit_loss"]
+
+            if profit > 0:
+                outcome = "WIN"
+            elif profit < 0:
+                outcome = "LOSS"
+            else:
+                outcome = "BREAKEVEN"
+
+            self.feedback_ai.save_feedback(
+                symbol=market["symbol"],
+                decision=manager_decision,
+                profit_loss=profit,
+                outcome=outcome
+            )
+
+            print("✅ Feedback AI Finished")
+
+
+        # ---------------------------------
+        # LEARNING AI
+        # ---------------------------------
+
+        print("\n🧠 Running Learning AI...\n")
+
+        self.learning_ai.load_memories()
+
+        self.learning_ai.learn()
+
+        print("✅ Learning AI Finished")     
+
 
         # ==========================================
         # CLOSE
@@ -281,7 +351,27 @@ class ManagerAI:
         try:
             self.fusion_ai.close()
         except:
+            pass
+
+        try:
+            self.memory_ai.close()
+        except:
+            pass
+
+        try:
+            self.feedback_ai.close()
+        except:
+            pass
+
+        try:
+            self.learning_ai.close()
+        except:
             pass    
+
+        try:
+           self.error_monitor_ai.close()
+        except:
+           pass   
 
         self.cur.close()
         self.conn.close()
@@ -289,9 +379,9 @@ class ManagerAI:
         print("✅ Manager AI Closed")
 
 
-# ==========================================
-# MAIN
-# ==========================================
+       # ==========================================
+       # MAIN
+       # ==========================================
 
 if __name__ == "__main__":
 
@@ -314,6 +404,11 @@ if __name__ == "__main__":
         print("=" * 60)
         print(e)
 
+        manager.error_monitor_ai.save_error(
+            "ManagerAI",
+            e
+        )
+
     finally:
 
-        manager.close()     
+        manager.close()

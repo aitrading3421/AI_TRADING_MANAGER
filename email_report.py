@@ -3,20 +3,29 @@ from email.mime.text import MIMEText
 from config import EMAIL, APP_PASSWORD
 
 
-def send_email(subject, body, receiver):
-    msg = MIMEText(body)
+class EmailAI:
 
-    msg["Subject"] = subject
-    msg["From"] = EMAIL
-    msg["To"] = receiver
+    def __init__(self):
+        print("=" * 60)
+        print("📧 EMAIL AI")
+        print("=" * 60)
+        print("✅ Email AI Ready")
 
-    server = smtplib.SMTP("smtp.gmail.com", 587)
-    server.starttls()
+    def send_email(self, subject, body, receiver):
 
-    server.login(EMAIL, APP_PASSWORD)
+        msg = MIMEText(body)
 
-    server.send_message(msg)
+        msg["Subject"] = subject
+        msg["From"] = EMAIL
+        msg["To"] = receiver
 
-    server.quit()
+        server = smtplib.SMTP("smtp.gmail.com", 587)
+        server.starttls()
 
-    print("✅ Email sent successfully!")
+        server.login(EMAIL, APP_PASSWORD)
+
+        server.send_message(msg)
+
+        server.quit()
+
+        print("✅ Email Sent Successfully") 
